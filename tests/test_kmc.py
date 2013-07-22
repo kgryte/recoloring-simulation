@@ -1,4 +1,5 @@
-
+#!/usr/bin/env python
+# coding: utf-8
 
 # Import various nose tools:
 from nose.tools import eq_, raises
@@ -6,6 +7,7 @@ from nose.tools import eq_, raises
 # Import the Kinetic Monte Carlo module:
 from kmc import *
 
+# Test Bad Input:
 class TestBadInput:
     """Test Cases for Bad Input"""
 
@@ -46,7 +48,13 @@ class TestBadInput:
         test = np.array_equal(self._kmc.initialProbs, np.array([0.5, 0.5]))
         eq_(test, True)
 
-    def test_initialProbs_sanity(self):
+    def test_initialProbs_sanity_list_input(self):
+        """initialProbs should accept a list as input"""
+        self._kmc.initialProbs = [0.6, 0.4]
+        test = np.array_equal(self._kmc.initialProbs, np.array([0.6, 0.4]))
+        eq_(test, True)
+
+    def test_initialProbs_sanity_numerical_input(self):
         """initialProbs should accept numerical array input"""
         self._kmc.initialProbs = np.array([0.6, 0.4])
         test = np.array_equal(self._kmc.initialProbs, np.array([0.6, 0.4]))
@@ -68,7 +76,13 @@ class TestBadInput:
         test = np.array_equal(self._kmc.rateMatrix, np.array([[-10, 10], [10, -10]]))
         eq_(test, True)
 
-    def test_rateMatrix_sanity(self):
+    def test_rateMatrix_sanity_list_input(self):
+        """rateMatrix should accept a list as input"""
+        self._kmc.rateMatrix = [[-20, 20], [20, -20]]
+        test = np.array_equal(self._kmc.rateMatrix, np.array([[-20, 20], [20, -20]]))
+        eq_(test, True)
+
+    def test_rateMatrix_sanity_numerical_input(self):
         """rateMatrix should accept numerical array input"""
         self._kmc.rateMatrix = np.array([[-20, 20], [20, -20]])
         test = np.array_equal(self._kmc.rateMatrix, np.array([[-20, 20], [20, -20]]))
@@ -89,6 +103,38 @@ class TestBadInput:
         """rateMatrix should fail if not a square matrix"""
         self._kmc.rateMatrix = np.array([[-10, 10]])
 
+    # seed:
+    @raises(InvalidInputError)
+    def test_seed_only_accepts_hashable_input(self):
+        """seed should fail if input is not hashable"""
+        self._kmc.seed = {}
+
+    # Keyword arguments:
+    def test_keyword_arguments(self):
+        """Instantiation should allow for setting configuration using keyword arguments"""
+        kmc = KineticMonteCarlo(totalTime=900, initialProbs=[0.4, 0.6], rateMatrix=[[-100, 100], [100, -100]])
+
+        eq_(kmc.totalTime, 900)
+
+        test = np.array_equal(kmc.rateMatrix, np.array([[-100, 100], [100, -100]]))
+        eq_(test, True)
+
+        test = np.array_equal(kmc.initialProbs, np.array([0.4, 0.6]))
+        eq_(test, True)
+
+    # Filename:
+    def test_filename_sanity_accept_string_input(self):
+        """filename should accept string input"""
+        self._kmc.filename = 'kmc-results/output.csv'
+        eq_(self._kmc.filename, 'kmc-results/output.csv')
+
+    @raises(InvalidInputError)
+    def test_filename_is_string(self):
+        """filename should fail if not a string"""
+        # check text output...
+        self._kmc.filename = 5
+
+# Test Simulation Behavior:
 class TestSimulation:
     """Test cases for simulation behavior"""
 
@@ -117,16 +163,77 @@ class TestSimulation:
         """seed should induce deterministic behavior"""
 
         # Run our first simulation instance:
-        self._kmc.seed(0)
+        self._kmc.seed = 0
         self._kmc.run()
 
         # Create a new instance and simulate:
         kmc = KineticMonteCarlo()
-        kmc.seed(0)
+        kmc.seed = 0
         kmc.run()
 
         # The two chains should be equal:
         test = np.array_equal(self._kmc.markovChain, kmc.markovChain)
         eq_(test, True)
 
+    def test_seed_generates_reproducible_behavior(self):
+        """seed should generate reproducible behavior"""
 
+        # Run our first simulation instance:
+        self._kmc.run()
+        seed = self._kmc.seed
+
+        # Create a new instance and simulate, using the seed of the previous instance:
+        kmc = KineticMonteCarlo()
+        kmc.seed = seed
+        kmc.run()
+
+        # The two chains should be equal:
+        test = np.array_equal(self._kmc.markovChain, kmc.markovChain)
+        eq_(test, True)
+
+    # Save to output:
+    def test_output_saves_to_csv(self):
+        """if filename is provided, should save to CSV output"""
+
+        self._kmc.filename = 'kmc-results/output.csv'
+        self._kmc.run()
+
+        # Check if file exists:
+        try:
+            with open(self._kmc.filename): pass
+        except:
+            raise
+
+        # Read the file and check that it was written correctly:
+        df = pd.read_csv(self._kmc.filename)
+
+        # Note: we just check for the first column, as rounding errors may have occurred during output. Here, we just check that the state sequence is the same.
+        test = np.array_equal(self._kmc.markovChain.values[:,1], df.values[:,1])
+        eq_(test, True)
+
+    def test_output_saves_settings_to_json(self):
+        """if output, settings should save to JSON"""
+
+        self._kmc.filename = 'kmc-results/output.csv'
+        self._kmc.run()
+
+        # Check if file exists:
+        path = os.path.splitext(self._kmc.filename)
+        filename = os.path.join(path[0] + '.' + 'json')
+        try:
+            with open(filename, 'r') as f:
+
+                # Read the file and check that it was written correctly:
+                data = f.read()
+                settings = json.loads(data)
+
+                kmc = KineticMonteCarlo()
+                kmc.seed = settings['seed']
+                kmc.run()
+
+                # Simulation should be reproducible:
+                test = np.array_equal(self._kmc.markovChain, kmc.markovChain)
+                eq_(test, True)
+
+        except:
+            raise

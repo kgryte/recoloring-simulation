@@ -1,0 +1,20 @@
+{
+    "totalTime": 1000, 
+    "seed": 254412317, 
+    "initialProbs": [
+        0.5, 
+        0.5
+    ], 
+    "desc": "Simulation: Kinetic Monte Carlo. Output: Markov Chain.", 
+    "data": "kmc-results/output.csv", 
+    "rateMatrix": [
+        [
+            0, 
+            10
+        ], 
+        [
+            10, 
+            0
+        ]
+    ]
+}
